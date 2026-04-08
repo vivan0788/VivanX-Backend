@@ -8,8 +8,8 @@ app = Flask(__name__)
 CORS(app)
 
 # --- APNI DETAILS YAHAN DALEIN ---
-BOT_TOKEN = "8788602350:AAE_L4oTu8ja32Axmr8A1o5jpqJFRqHWkq8"
-CHAT_ID = "93372553"
+BOT_TOKEN = "8517364051:AAFUprGh5hLgl0lvl1PUWiPxGXsu6D8gQY0"
+CHAT_ID = "8450988216"
 
 def send_telegram(message=None, photo_path=None):
     if photo_path:
